@@ -14,9 +14,19 @@ import { Button } from '@/components/ui/button';
 import { useForm } from 'react-hook-form';
 import { SignUpValidation } from '@/lib/validation';
 import Loader from '@/components/shared/Loader';
+import { Link, useNavigate } from 'react-router-dom';
+import { createUserAccount } from '@/lib/appwrite/api';
+import { useToast } from '@/components/ui/use-toast';
+import { useCreateUserAccount, useSignInAccount } from '@/lib/react-query/queriesAndMutations';
+import { useUserContext } from '@/context/AuthContext';
 
 const SignupForm = () => {
-  const isLoading = false;
+  const { toast } = useToast();
+  const { checkAuthUser, isLoading: isUserLoading } = useUserContext();
+  const navigate = useNavigate();
+  
+  const { mutateAsync: createUserAccount, isPending: isCreatingAccount } = useCreateUserAccount();
+  const { mutateAsync: signInAccount, isPending: isSigningIn} = useSignInAccount();
 
   const form = useForm<z.infer<typeof SignUpValidation>>({
     resolver: zodResolver(SignUpValidation),
@@ -29,10 +39,35 @@ const SignupForm = () => {
   });
 
   // 2. Define a submit handler.
-  function onSubmit(values: z.infer<typeof SignUpValidation>) {
-    // Do something with the form values.
-    // ✅ This will be type-safe and validated.
-    console.log(values);
+  async function onSubmit(values: z.infer<typeof SignUpValidation>) {
+    // Create a user
+    const newUser = await createUserAccount(values);
+
+    if(!newUser){
+      return toast({
+       title: 'Sign up failed. Please try again.'
+      });
+
+      const session = await signInAccount({
+        email: values.email,
+        password: values.password
+      })
+
+      if(!session){
+        return toast({ title: 'Sign in failed. Please try again.'})
+      }
+
+      const isLoggedIn = await checkAuthUser();
+
+      if (isLoggedIn){
+        form.reset();
+        navigate('/')
+      } else{
+        return toast({title: 'Sign up failed. Please try again.'})
+      }
+    }
+
+    // console.log(newUser);
   }
   return (
     <Form {...form}>
@@ -45,7 +80,7 @@ const SignupForm = () => {
           Create a new account
         </h2>
         <p className='text-light-3 small-medium md:base-regular mt-2'>
-          To use BayangBayang enter your details
+          To use BayangBayang please enter your details
         </p>
 
         <form
@@ -125,7 +160,7 @@ const SignupForm = () => {
             type='submit'
             className='shad-button_primary'
           >
-            {isLoading ? (
+            {isCreatingAccount ? (
               <div className='flex-center gap-2'>
                <Loader/> Loading ....
               </div>
@@ -133,6 +168,10 @@ const SignupForm = () => {
               'Sign Up'
             )}
           </Button>
+          <p className='text-small-regular text-light-2 text-center mt-2'>
+              Already have an account?
+              <Link to="/sign-in" className='text-primary-500 text-small-semibold ml-1'> Log In</Link> 
+          </p>
         </form>
       </div>
     </Form>
